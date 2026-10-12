@@ -1,0 +1,9 @@
+torch>=2.1
+torchvision>=0.16
+timm>=0.9.10
+h5py
+opencv-python
+numpy
+huggingface_hub
+safetensors
+tensorboard
