@@ -1,6 +1,8 @@
 """Một lệnh cho cả quy trình: tạo cache (nếu chưa có) -> train -> eval cuối -> ghi kết quả ra file.
 
-    nohup python pipeline.py <các cờ giống train.py / data.py> > /dev/null 2>&1 &
+    python pipeline.py <các cờ giống train.py / data.py>       # chạy trong tmux nếu train lâu
+
+Mỗi out_dir chỉ chạy được 1 pipeline một lúc (khoá pipeline.lock): lỡ chạy lần 2 sẽ báo lỗi và thoát.
 
 Sau đó chỉ cần xem trong <out_dir>:
     STATUS        : RUNNING (đang ở bước nào) / DONE / FAILED / STOPPED
@@ -21,6 +23,7 @@ Chạy lại đúng lệnh cũ (có --resume auto) sau khi bị ngắt: train ti
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
 import os
 import signal
@@ -54,6 +57,19 @@ class Tee:
 
     def isatty(self):
         return False
+
+
+def acquire_lock(out_dir):
+    """Khoá theo out_dir. Hệ điều hành tự nhả khi tiến trình chết (kể cả kill -9) -> không bị kẹt khoá cũ."""
+    fh = open(os.path.join(out_dir, "pipeline.lock"), "a+")
+    try:
+        fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        fh.seek(0)
+        sys.exit(f"[pipeline] {out_dir} đang được một pipeline khác dùng (PID {fh.read().strip() or '?'}).\n"
+                 f"  Xem: pgrep -af pipeline.py | Dừng: pkill -f pipeline.py | Hoặc đổi --out_dir")
+    fh.seek(0); fh.truncate(); fh.write(str(os.getpid())); fh.flush()
+    return fh
 
 
 def set_status(out_dir, text):
@@ -182,6 +198,7 @@ def main():
     cfg = parse_config(rest, description="Pipeline: cache -> train -> eval -> results.md. "
                                          "Thêm: --skip_train, --open_loop_max N")
     os.makedirs(cfg.out_dir, exist_ok=True)
+    lock = acquire_lock(cfg.out_dir)  # noqa: F841  giữ tham chiếu để khoá tồn tại tới khi thoát
     log = open(os.path.join(cfg.out_dir, "pipeline.log"), "a")
     sys.stdout, sys.stderr = Tee(sys.__stdout__, log), Tee(sys.__stderr__, log)
     print(f"\n[pipeline] ===== {time.strftime('%Y-%m-%d %H:%M:%S')} | {' '.join(sys.argv)}")

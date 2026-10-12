@@ -18,7 +18,7 @@ pip install -r requirements.txt
 ## Một lệnh: tạo cache → train → eval → ghi kết quả
 `pipeline.py` nhận mọi cờ của `data.py` và `train.py`. Nếu `cache_dir` chưa có thì tạo cache (tự tải dataset về `raw_dir` nếu thư mục trống). Sau đó train, rồi eval `best.pt` trên **toàn bộ** tập val (tách theo từng tay) và chạy open-loop trên từng episode val. Lệnh dưới đây đã gồm cấu hình đề xuất cho GPU 32 GB:
 ```bash
-nohup python pipeline.py \
+python pipeline.py \
   --raw_dir data/raw --cache_dir data/cache --out_dir runs/vafm_b128 --seed 0 \
   --key_rgb observations/images/chest_rgb --key_depth observations/images/chest_depth \
   --key_cmd joint_commands --key_state observations/qpos \
@@ -30,10 +30,9 @@ nohup python pipeline.py \
   --n_flow_samples 4 --inactive_weight 0.1 --gripper_weight 2.0 --balance_arms true \
   --split_mode cache --val_frac 0.12 --eval_samples 2000 --eval_every 0 --eval_every_epochs 2 \
   --log_every 20 --tensorboard true --save_every 0 --save_every_epochs 10 --keep_ckpts 3 --resume auto \
-  --open_loop_max 0 \
-  > /dev/null 2>&1 &
+  --open_loop_max 0
 ```
-Lệnh chạy nền: tắt terminal hay mất SSH thì vẫn tiếp tục chạy. Sau đó chỉ cần xem:
+Log hiện thẳng trên màn hình và đồng thời ghi vào `runs/vafm_b128/pipeline.log`. Train mất vài giờ nên hãy chạy trong `tmux new -s vafm`: rời phiên bằng Ctrl+B rồi D (train vẫn chạy), quay lại bằng `tmux attach -t vafm`. Mỗi `out_dir` chỉ chạy được một pipeline một lúc; lỡ chạy lần hai sẽ bị từ chối. Từ terminal khác có thể xem:
 ```bash
 cat runs/vafm_b128/STATUS          # RUNNING: tạo cache | train | eval  /  DONE  /  FAILED  /  STOPPED
 cat runs/vafm_b128/results.md      # chỉ xuất hiện khi DONE
@@ -42,7 +41,7 @@ tensorboard --logdir runs
 ```
 - `results.md`: so sánh model với baseline đứng yên (toàn val và từng tay), sai số theo bước trong chunk, open-loop từng episode, lịch sử eval trong lúc train. Bản máy đọc nằm ở `results.json`.
 - Bị ngắt (`STOPPED`) hoặc lỗi (`FAILED`, xem `pipeline.log`): chạy lại **đúng lệnh trên**. `--resume auto` sẽ train tiếp từ `last.pt`, cache đã có thì không tạo lại.
-- Dừng hẳn: `pkill -f pipeline.py` (STATUS sẽ ghi `STOPPED`).
+- Dừng hẳn: Ctrl+C trong tmux, hoặc `pkill -f pipeline.py` (STATUS sẽ ghi `STOPPED`).
 - Chỉ eval lại một lần train đã xong: thêm `--skip_train`. `--open_loop_max N` giới hạn số episode chạy open-loop (`-1` = bỏ qua).
 - Nếu đã tạo cache bằng cấu hình khác (key sai, 50 Hz...) thì xoá `data/cache` trước khi chạy.
 
